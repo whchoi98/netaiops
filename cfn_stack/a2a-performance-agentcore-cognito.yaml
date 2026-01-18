@@ -198,7 +198,7 @@ Resources:
   CognitoMachineClientIdParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/machine_client_id
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/machine_client_id"
       Type: String
       Value: !Ref MachineUserPoolClient
       Description: Machine Cognito client ID
@@ -208,7 +208,7 @@ Resources:
   CognitoWebClientIdParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/web_client_id
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/web_client_id"
       Type: String
       Value: !Ref WebUserPoolClient
       Description: Cognito client ID for web app
@@ -218,7 +218,7 @@ Resources:
   UserPoolIdParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/userpool_id
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/userpool_id"
       Type: String
       Value: !Ref UserPool
       Description: Cognito User Pool ID
@@ -228,7 +228,7 @@ Resources:
   CognitoProviderParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/cognito_provider
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/cognito_provider"
       Type: String
       Value: !Join
         - ''
@@ -243,7 +243,7 @@ Resources:
   CognitoAuthScopeParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/cognito_auth_scope
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/cognito_auth_scope"
       Type: String
       Value: !Join
         - ' '
@@ -264,7 +264,7 @@ Resources:
   CognitoDiscoveryURLParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/cognito_discovery_url
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/cognito_discovery_url"
       Type: String
       Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}/.well-known/openid-configuration'
       Description: OAuth2 Discovery URL
@@ -274,7 +274,7 @@ Resources:
   CognitoTokenURLParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/cognito_token_url
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/cognito_token_url"
       Type: String
       Value: !Join
         - ''
@@ -288,7 +288,7 @@ Resources:
   CognitoAuthorizeURLParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/cognito_auth_url
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/cognito_auth_url"
       Type: String
       Value: !Join
         - ''
@@ -302,7 +302,7 @@ Resources:
   CognitoDomainParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/cognito_domain
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/cognito_domain"
       Type: String
       Value: !Join
         - ''
@@ -317,7 +317,7 @@ Resources:
   AgentCoreExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: 'performance-gateway-execution-role'
+      RoleName: !Sub '${AWS::StackName}-gateway-execution-role'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -608,7 +608,7 @@ Resources:
   GatewayExecutionRoleParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/gateway_iam_role
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/gateway_iam_role"
       Type: String
       Value: !GetAtt AgentCoreExecutionRole.Arn
       Description: IAM execution role ARN for AgentCore runtime
@@ -619,7 +619,7 @@ Resources:
   MachineClientSecretParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /a2a/app/performance/agentcore/machine_client_secret
+      Name: !Sub "/a2a/app/performance/agentcore/${AWS::StackName}/machine_client_secret"
       Type: String
       Value: !GetAtt MachineUserPoolClient.ClientSecret
       Description: Cognito machine client secret for OAuth token generation
