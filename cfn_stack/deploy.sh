@@ -116,6 +116,39 @@ upload_template_to_s3() {
     echo "s3://${bucket_name}/${s3_key}"
 }
 
+# 함수: S3에서 CFN 템플릿 정리
+cleanup_s3_templates() {
+    local bucket_name=$(get_s3_bucket_name)
+
+    log_info "S3 템플릿 정리 중: s3://${bucket_name}/${S3_PREFIX}/"
+
+    # 버킷이 존재하는지 확인
+    if aws s3api head-bucket --bucket "$bucket_name" 2>/dev/null; then
+        # 템플릿 프리픽스 아래의 모든 객체 삭제
+        aws s3 rm "s3://${bucket_name}/${S3_PREFIX}/" --recursive > /dev/null 2>&1 || true
+
+        # 버전된 객체도 삭제 (버전 관리가 활성화된 경우)
+        aws s3api list-object-versions --bucket "$bucket_name" --prefix "${S3_PREFIX}/" --output json 2>/dev/null | \
+            jq -r '.Versions[]? | "\(.Key) \(.VersionId)"' 2>/dev/null | \
+            while read key version; do
+                [ -n "$key" ] && [ -n "$version" ] && \
+                aws s3api delete-object --bucket "$bucket_name" --key "$key" --version-id "$version" > /dev/null 2>&1 || true
+            done
+
+        # 삭제 마커도 제거
+        aws s3api list-object-versions --bucket "$bucket_name" --prefix "${S3_PREFIX}/" --output json 2>/dev/null | \
+            jq -r '.DeleteMarkers[]? | "\(.Key) \(.VersionId)"' 2>/dev/null | \
+            while read key version; do
+                [ -n "$key" ] && [ -n "$version" ] && \
+                aws s3api delete-object --bucket "$bucket_name" --key "$key" --version-id "$version" > /dev/null 2>&1 || true
+            done
+
+        log_success "S3 템플릿 정리 완료"
+    else
+        log_warn "S3 버킷이 존재하지 않습니다: $bucket_name"
+    fi
+}
+
 # 함수: 스택 배포 (S3 사용)
 deploy_stack() {
     local stack_name=$1
@@ -229,6 +262,7 @@ Commands:
   delete-all          모든 스택 삭제 (역순)
   delete [stack]      특정 스택 삭제
   delete-bucket       CFN 템플릿용 S3 버킷 삭제
+  cleanup-templates   S3의 CFN 템플릿만 삭제
 
   status              모든 스택 상태 확인
   list                배포된 스택 목록
@@ -354,6 +388,12 @@ deploy_all() {
     deploy_traffic
 
     echo ""
+
+    # 배포 완료 후 S3 템플릿 정리
+    log_step "[정리] S3 템플릿 삭제"
+    cleanup_s3_templates
+
+    echo ""
     log_success "=== 전체 배포 완료 ==="
     echo ""
     show_status
@@ -435,20 +475,21 @@ main() {
     done
 
     case "$command" in
-        deploy-all)     deploy_all "$db_password" ;;
-        deploy-base)    deploy_base "$db_password" ;;
-        deploy-nfm)     deploy_nfm ;;
-        deploy-cognito) deploy_cognito ;;
-        deploy-modules) deploy_modules ;;
-        deploy-traffic) deploy_traffic ;;
-        delete-all)     delete_all "$extra_args" ;;
-        delete)         delete_stack "$2" ;;
-        delete-bucket)  delete_s3_bucket ;;
-        status)         show_status ;;
-        list)           show_status ;;
-        init)           init_setup ;;
-        -h|--help|"")   show_usage ;;
-        *)              log_error "알 수 없는 명령: $command"; show_usage; exit 1 ;;
+        deploy-all)       deploy_all "$db_password" ;;
+        deploy-base)      deploy_base "$db_password" ;;
+        deploy-nfm)       deploy_nfm ;;
+        deploy-cognito)   deploy_cognito ;;
+        deploy-modules)   deploy_modules ;;
+        deploy-traffic)   deploy_traffic ;;
+        delete-all)       delete_all "$extra_args" ;;
+        delete)           delete_stack "$2" ;;
+        delete-bucket)    delete_s3_bucket ;;
+        cleanup-templates) cleanup_s3_templates ;;
+        status)           show_status ;;
+        list)             show_status ;;
+        init)             init_setup ;;
+        -h|--help|"")     show_usage ;;
+        *)                log_error "알 수 없는 명령: $command"; show_usage; exit 1 ;;
     esac
 }
 
