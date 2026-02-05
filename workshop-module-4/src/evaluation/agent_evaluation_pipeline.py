@@ -10,10 +10,14 @@ import boto3
 import json
 import logging
 import numpy as np
+import os
 import uuid
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
+
+# 기본 모델 ID (환경변수로 오버라이드 가능)
+DEFAULT_MODEL_ID = "global.anthropic.claude-opus-4-5-20251101-v1:0"
 
 # Import AgentCore client and configuration loader
 from .agentcore_client import AgentCoreClient
@@ -183,8 +187,11 @@ class CloudWatchToolDetector:
 
 class LLMJudge:
     """LLM-as-a-Judge evaluation using Claude Sonnet 4"""
-    
-    def __init__(self, judge_model: str = "global.anthropic.claude-opus-4-5-20251101-v1:0"):
+
+    def __init__(self, judge_model: str = None):
+        # 환경변수 > 파라미터 > 기본값 순으로 모델 ID 결정
+        if judge_model is None:
+            judge_model = os.environ.get('BEDROCK_MODEL_ID', DEFAULT_MODEL_ID)
         self.judge_model = judge_model
         # Get region from config or use default
         config = get_config()

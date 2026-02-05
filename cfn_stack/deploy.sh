@@ -26,6 +26,14 @@ S3_PREFIX="netaiops-cfn-templates"
 # 지원하는 리전 목록 (Bedrock AgentCore 지원 리전)
 SUPPORTED_REGIONS=("us-east-1" "us-west-2" "eu-west-1" "ap-northeast-1" "ap-southeast-1")
 
+# 지원하는 모델 목록
+BEDROCK_MODEL_ID=""
+declare -A SUPPORTED_MODELS=(
+    ["opus-4.5"]="global.anthropic.claude-opus-4-5-20251101-v1:0"
+    ["sonnet-4"]="global.anthropic.claude-sonnet-4-20250514-v1:0"
+)
+MODEL_NAMES=("opus-4.5" "sonnet-4")
+
 # 함수: 설정 파일에서 리전 로드
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
@@ -33,9 +41,12 @@ load_config() {
     fi
 }
 
-# 함수: 설정 파일에 리전 저장
+# 함수: 설정 파일에 설정 저장
 save_config() {
-    echo "AWS_REGION=\"$AWS_REGION\"" > "$CONFIG_FILE"
+    cat > "$CONFIG_FILE" << EOF
+AWS_REGION="$AWS_REGION"
+BEDROCK_MODEL_ID="$BEDROCK_MODEL_ID"
+EOF
     log_info "설정이 저장되었습니다: $CONFIG_FILE"
 }
 
@@ -99,11 +110,79 @@ ensure_region() {
     # 4. 대화형 프롬프트
     prompt_region
 
-    # 5. 선택한 리전 저장 여부 확인
-    read -p "이 리전을 기본값으로 저장하시겠습니까? (Y/n): " save_choice
-    save_choice="${save_choice:-Y}"
-    if [[ "$save_choice" =~ ^[Yy]$ ]]; then
-        save_config
+    # 리전 저장은 모델 선택 후 함께 처리
+}
+
+# 함수: 모델 선택 프롬프트
+prompt_model() {
+    echo ""
+    log_info "Claude 모델을 선택하세요:"
+    echo ""
+
+    local i=1
+    for model_name in "${MODEL_NAMES[@]}"; do
+        local model_id="${SUPPORTED_MODELS[$model_name]}"
+        if [ "$model_name" = "opus-4.5" ]; then
+            echo "  $i) $model_name (기본값, 최고 성능)"
+            echo "     → $model_id"
+        else
+            echo "  $i) $model_name (빠른 응답, 비용 효율)"
+            echo "     → $model_id"
+        fi
+        ((i++))
+    done
+    echo ""
+
+    read -p "선택 [1-$((i-1))] (기본값: 1): " choice
+    choice="${choice:-1}"
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#MODEL_NAMES[@]} ]; then
+        local selected_name="${MODEL_NAMES[$((choice-1))]}"
+        BEDROCK_MODEL_ID="${SUPPORTED_MODELS[$selected_name]}"
+    else
+        BEDROCK_MODEL_ID="${SUPPORTED_MODELS[opus-4.5]}"
+    fi
+
+    log_success "선택된 모델: $BEDROCK_MODEL_ID"
+}
+
+# 함수: 모델 확인 및 설정
+ensure_model() {
+    # 1. 명령줄 옵션으로 이미 설정된 경우 사용
+    if [ -n "$BEDROCK_MODEL_ID" ]; then
+        return
+    fi
+
+    # 2. 환경변수 확인
+    if [ -n "${BEDROCK_MODEL_ID_ENV:-}" ]; then
+        BEDROCK_MODEL_ID="$BEDROCK_MODEL_ID_ENV"
+        return
+    fi
+
+    # 3. 설정 파일에서 로드
+    load_config
+    if [ -n "$BEDROCK_MODEL_ID" ]; then
+        log_info "저장된 모델 사용: $BEDROCK_MODEL_ID"
+        return
+    fi
+
+    # 4. 대화형 프롬프트
+    prompt_model
+}
+
+# 함수: 리전과 모델 설정 확인 및 저장
+ensure_settings() {
+    ensure_region
+    ensure_model
+
+    # 설정 저장 여부 확인 (한 번만)
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo ""
+        read -p "이 설정을 기본값으로 저장하시겠습니까? (Y/n): " save_choice
+        save_choice="${save_choice:-Y}"
+        if [[ "$save_choice" =~ ^[Yy]$ ]]; then
+            save_config
+        fi
     fi
 }
 
@@ -355,9 +434,13 @@ Commands:
   init                S3 버킷만 생성 (사전 준비)
   set-region          리전 설정 변경
   show-region         현재 설정된 리전 확인
+  set-model           모델 설정 변경
+  show-model          현재 설정된 모델 확인
+  show-config         전체 설정 확인
 
 Options:
   --region REGION     AWS 리전 (미지정 시 대화형 선택)
+  --model MODEL       Claude 모델 (opus-4.5 | sonnet-4 | 전체 모델 ID)
   --db-password PWD   DB 비밀번호 (기본: ReInvent2025!)
   --s3-bucket NAME    사용할 S3 버킷 이름 (기본: 자동 생성)
   -h, --help          도움말
@@ -375,10 +458,16 @@ Options:
   - ap-northeast-1
   - ap-southeast-1
 
+지원 모델 (Claude):
+  - opus-4.5  → global.anthropic.claude-opus-4-5-20251101-v1:0 (기본, 최고 성능)
+  - sonnet-4  → global.anthropic.claude-sonnet-4-20250514-v1:0 (빠른 응답, 비용 효율)
+
 Examples:
-  $0 deploy-all                           # 대화형 리전 선택
-  $0 deploy-all --region us-east-1        # 명시적 리전 지정
-  $0 deploy-base --db-password MySecurePass123!
+  $0 deploy-all                           # 대화형 리전/모델 선택
+  $0 deploy-all --region us-east-1 --model opus-4.5
+  $0 deploy-all --model sonnet-4          # Sonnet 4 모델 사용
+  $0 set-model                            # 모델만 변경
+  $0 show-config                          # 전체 설정 확인
   $0 status
   $0 delete-all
 
@@ -605,22 +694,100 @@ show_region() {
     log_info "우선순위: --region 옵션 > 환경변수 > 설정 파일 > 대화형 입력"
 }
 
+# 함수: 모델 설정 변경
+set_model() {
+    log_info "=== 모델 설정 변경 ==="
+    echo ""
+
+    # 현재 설정 표시
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+        log_info "현재 저장된 모델: ${BEDROCK_MODEL_ID:-없음}"
+    fi
+
+    # 새 모델 선택
+    BEDROCK_MODEL_ID=""
+    prompt_model
+
+    # 저장
+    load_config  # 리전 설정 유지
+    save_config
+
+    echo ""
+    log_success "모델이 변경되었습니다: $BEDROCK_MODEL_ID"
+}
+
+# 함수: 현재 모델 확인
+show_model() {
+    log_info "=== 현재 모델 설정 ==="
+    echo ""
+
+    # 1. 설정 파일 확인
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+        if [ -n "$BEDROCK_MODEL_ID" ]; then
+            log_info "설정 파일 (.deploy-config): $BEDROCK_MODEL_ID"
+        else
+            log_info "설정 파일 (.deploy-config): 설정되지 않음"
+        fi
+    else
+        log_info "설정 파일 (.deploy-config): 파일 없음"
+    fi
+
+    # 2. 환경변수 확인
+    if [ -n "${BEDROCK_MODEL_ID_ENV:-}" ]; then
+        log_info "환경변수 (BEDROCK_MODEL_ID): $BEDROCK_MODEL_ID_ENV"
+    else
+        log_info "환경변수 (BEDROCK_MODEL_ID): 설정되지 않음"
+    fi
+
+    echo ""
+    log_info "지원 모델:"
+    for model_name in "${MODEL_NAMES[@]}"; do
+        echo "  - $model_name: ${SUPPORTED_MODELS[$model_name]}"
+    done
+    echo ""
+    log_info "우선순위: --model 옵션 > 환경변수 > 설정 파일 > 대화형 입력"
+}
+
+# 함수: 전체 설정 확인
+show_config() {
+    log_info "=== 현재 전체 설정 ==="
+    echo ""
+
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+        log_info "설정 파일: $CONFIG_FILE"
+        echo ""
+        echo "  AWS_REGION:       ${AWS_REGION:-설정되지 않음}"
+        echo "  BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-설정되지 않음}"
+    else
+        log_warn "설정 파일이 없습니다: $CONFIG_FILE"
+        log_info "'./deploy.sh init' 또는 배포 명령 실행 시 설정됩니다."
+    fi
+    echo ""
+}
+
 # 메인 로직
 main() {
     local command="${1:-}"
     local db_password="ReInvent2025!"
     local extra_args=""
     local region_from_cli=""
+    local model_from_cli=""
 
     # 환경변수 백업
     AWS_REGION_ENV="${AWS_REGION:-}"
+    BEDROCK_MODEL_ID_ENV="${BEDROCK_MODEL_ID:-}"
     AWS_REGION=""
+    BEDROCK_MODEL_ID=""
 
     # 옵션 파싱
     shift || true
     while [[ $# -gt 0 ]]; do
         case $1 in
             --region) region_from_cli="$2"; shift 2 ;;
+            --model) model_from_cli="$2"; shift 2 ;;
             --db-password) db_password="$2"; shift 2 ;;
             --s3-bucket) S3_BUCKET_NAME="$2"; shift 2 ;;
             --delete-bucket) extra_args="--delete-bucket"; shift ;;
@@ -634,10 +801,22 @@ main() {
         AWS_REGION="$region_from_cli"
     fi
 
-    # 도움말, 빈 명령, 리전 관련 명령이 아닌 경우 리전 확인
+    # 명령줄에서 모델이 지정된 경우 우선 사용
+    if [ -n "$model_from_cli" ]; then
+        # 모델 이름(opus-4.5, sonnet-4) 또는 전체 ID 지원
+        if [[ -n "${SUPPORTED_MODELS[$model_from_cli]:-}" ]]; then
+            BEDROCK_MODEL_ID="${SUPPORTED_MODELS[$model_from_cli]}"
+        else
+            BEDROCK_MODEL_ID="$model_from_cli"
+        fi
+    fi
+
+    # 도움말, 빈 명령, 설정 관련 명령이 아닌 경우 설정 확인
     if [[ "$command" != "-h" && "$command" != "--help" && "$command" != "" && \
-          "$command" != "set-region" && "$command" != "show-region" ]]; then
-        ensure_region
+          "$command" != "set-region" && "$command" != "show-region" && \
+          "$command" != "set-model" && "$command" != "show-model" && \
+          "$command" != "show-config" ]]; then
+        ensure_settings
     fi
 
     case "$command" in
@@ -656,6 +835,9 @@ main() {
         init)             init_setup ;;
         set-region)       set_region ;;
         show-region)      show_region ;;
+        set-model)        set_model ;;
+        show-model)       show_model ;;
+        show-config)      show_config ;;
         -h|--help|"")     show_usage ;;
         *)                log_error "알 수 없는 명령: $command"; show_usage; exit 1 ;;
     esac

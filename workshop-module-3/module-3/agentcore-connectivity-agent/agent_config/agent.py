@@ -6,8 +6,12 @@ from strands_tools import current_time
 from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+# 기본 모델 ID (환경변수로 오버라이드 가능)
+DEFAULT_MODEL_ID = "global.anthropic.claude-opus-4-5-20251101-v1:0"
 
 
 class TroubleshootingAgent:
@@ -15,9 +19,12 @@ class TroubleshootingAgent:
         self,
         bearer_token: str,
         memory_hook: MemoryHook = None,
-        bedrock_model_id: str = "global.anthropic.claude-opus-4-5-20251101-v1:0",
+        bedrock_model_id: str = None,
         system_prompt: str = None,
     ):
+        # 환경변수 > 파라미터 > 기본값 순으로 모델 ID 결정
+        if bedrock_model_id is None:
+            bedrock_model_id = os.environ.get('BEDROCK_MODEL_ID', DEFAULT_MODEL_ID)
         self.model_id = bedrock_model_id
         self.model = BedrockModel(
             model_id=self.model_id,

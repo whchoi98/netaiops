@@ -8,8 +8,12 @@ from strands.tools.mcp import MCPClient
 from bedrock_agentcore.memory import MemoryClient
 import logging
 import boto3
+import os
 
 logger = logging.getLogger(__name__)
+
+# 기본 모델 ID (환경변수로 오버라이드 가능)
+DEFAULT_MODEL_ID = "global.anthropic.claude-opus-4-5-20251101-v1:0"
 
 
 def get_aws_account_id():
@@ -28,11 +32,14 @@ class PerformanceAgent:
         self,
         bearer_token: str,
         memory_hook_provider: MemoryHookProvider = None,
-        bedrock_model_id: str = "global.anthropic.claude-opus-4-5-20251101-v1:0",
+        bedrock_model_id: str = None,
         system_prompt: str = None,
         actor_id: str = None,
         session_id: str = None,
     ):
+        # 환경변수 > 파라미터 > 기본값 순으로 모델 ID 결정
+        if bedrock_model_id is None:
+            bedrock_model_id = os.environ.get('BEDROCK_MODEL_ID', DEFAULT_MODEL_ID)
         self.model_id = bedrock_model_id
         self.model = BedrockModel(
             model_id=self.model_id,
