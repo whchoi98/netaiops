@@ -216,13 +216,71 @@ python scripts/generate_html_report.py --latest --open
 
 **배포 명령:**
 ```bash
-./deploy.sh deploy-all          # 전체 스택 배포
+./deploy.sh deploy-all          # 전체 스택 배포 (권장)
 ./deploy.sh deploy-base         # 기본 인프라만
-./deploy.sh deploy-nfm          # Network Flow Monitor
+./deploy.sh deploy-nfm          # Network Flow Monitor (enable + setup)
 ./deploy.sh deploy-cognito      # Cognito 인증
 ./deploy.sh deploy-modules      # 모듈 설치
 ./deploy.sh deploy-traffic      # Traffic Mirroring
 ```
+
+### 배포 순서
+
+**deploy-all 실행 순서 (권장):**
+```
+[0/5] S3 버킷 준비
+[1/5] sample-app (기본 인프라)
+[2/5] nfm-enable (NFM 활성화)
+[3/5] cognito + modules (인증 및 모듈)
+[4/5] nfm-setup (NFM 설정)
+[5/5] traffic-mirror (트래픽 미러링)
+[정리] S3 템플릿 삭제
+```
+
+**개별 명령 순차 실행 시:**
+```
+deploy-base    → sample-app
+deploy-nfm     → nfm-enable + nfm-setup (한번에 실행)
+deploy-cognito → cognito
+deploy-modules → modules
+deploy-traffic → traffic-mirror
+```
+
+**deploy-all vs 개별 명령 차이점:**
+
+| 항목 | deploy-all | 개별 명령 순차 실행 |
+|------|-----------|-------------------|
+| NFM 배포 | Enable → (다른 작업) → Setup 분리 | Enable + Setup 한번에 |
+| S3 정리 | 완료 후 자동 정리 | 수동 cleanup-templates 필요 |
+| 상태 표시 | 완료 후 자동 표시 | 수동 status 실행 필요 |
+| 진행 상황 | 단계별 표시 | 개별 표시 |
+
+> 참고: 개별 명령도 의존성이 충족되면 정상 작동하지만, `deploy-all`이 최적화된 순서로 배포합니다.
+
+### 실시간 진행 상황 표시
+
+배포 중 CloudFormation 리소스 생성 이벤트가 실시간으로 표시됩니다:
+
+```
+[STEP] 배포 중: netaiops-sample-app
+
+[INFO] 리소스 생성 진행 상황:
+────────────────────────────────────────────────────────────────────
+시간                      리소스                              상태
+────────────────────────────────────────────────────────────────────
+14:32:15                 AppVPC                              CREATE_IN_PROGRESS
+14:32:18                 AppVPC                              CREATE_COMPLETE
+14:32:20                 PublicSubnet1                       CREATE_IN_PROGRESS
+...
+────────────────────────────────────────────────────────────────────
+
+[SUCCESS] netaiops-sample-app 배포 완료
+```
+
+**상태 색상:**
+- 녹색: 완료 (CREATE_COMPLETE, UPDATE_COMPLETE)
+- 노란색: 진행 중 (CREATE_IN_PROGRESS)
+- 빨간색: 실패 (CREATE_FAILED, ROLLBACK)
 
 **삭제 명령:**
 ```bash
